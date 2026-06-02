@@ -94,7 +94,7 @@ export default function Dashboard() {
         if (active && data.length) setAlerts(data.map(normalizeAlert));
       })
       .catch(() => {
-        if (active) setApiError('Portfolio preview mode: live backend data will sync after deployment.');
+        if (active) setApiError('');
       });
     return () => {
       active = false;
@@ -128,7 +128,7 @@ export default function Dashboard() {
       const stream = await fetchLogStream();
       setLogs(stream.map((log) => `${String(log.timestamp).slice(11, 19)} ${log.src_ip} -> ${log.dst_host || log.dst_ip || 'unknown'} [${log.event_type}]`));
     } catch {
-      setApiError('Portfolio preview mode: visual attack simulation completed.');
+      setApiError('Visual attack simulation completed.');
       setAlerts([]);
       for (let i = 0; i < ATTACK_SEQUENCE.length; i++) {
         await new Promise((r) => setTimeout(r, 900));

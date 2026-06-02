@@ -1,10 +1,11 @@
 'use client';
 
+import type { FormEvent } from 'react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FilePlus2 } from 'lucide-react';
 import AppShell from '../components/AppShell';
-import { createIncident, type IncidentEvidence } from '../lib/api';
+import { createIncident, getToken, type IncidentEvidence } from '../lib/api';
 
 const defaultEvidence: IncidentEvidence[] = [
   {
@@ -24,7 +25,12 @@ export default function IntakePage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const submit = async () => {
+  const submit = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    if (!getToken()) {
+      router.push('/login?next=/intake');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -39,7 +45,7 @@ export default function IntakePage() {
       });
       router.push(`/investigate?incident=${encodeURIComponent(incident.id)}`);
     } catch {
-      setError('Could not create the incident. Sign in first and check that the evidence is valid JSON.');
+      setError('Could not create the incident. Check that the evidence is valid JSON, then try again.');
     } finally {
       setLoading(false);
     }
@@ -54,7 +60,7 @@ export default function IntakePage() {
         </div>
       </section>
 
-      <section className="reports-layout">
+      <form className="reports-layout" onSubmit={submit}>
         <article className="panel">
           <div className="auth-form">
             <label>
@@ -89,12 +95,12 @@ export default function IntakePage() {
           <p className="section-label">Evidence JSON</p>
           <textarea className="code-input" value={evidenceText} onChange={(event) => setEvidenceText(event.target.value)} />
           {error && <p className="form-error">{error}</p>}
-          <button className="primary-button" onClick={submit} disabled={loading || !title || !summary}>
+          <button className="primary-button" type="submit" disabled={loading || !title || !summary}>
             <FilePlus2 size={16} />
             {loading ? 'Opening incident...' : 'Open real incident'}
           </button>
         </article>
-      </section>
+      </form>
     </AppShell>
   );
 }

@@ -29,7 +29,7 @@ export default function Reports() {
       setSelected(active ?? null);
       if (active) setReport(await fetchIncidentReport(active.id));
     } catch {
-      setError('Portfolio preview is ready. Live reports will appear after deployment or simulation.');
+      setError('Reports are ready once an incident has been opened.');
     } finally {
       setLoading(false);
     }
@@ -46,7 +46,7 @@ export default function Reports() {
         setReport(first ? await fetchIncidentReport(first.id) : '');
       })
       .catch(() => {
-        if (active) setError('Portfolio preview is ready. Live reports will appear after deployment or simulation.');
+        if (active) setError('Reports are ready once an incident has been opened.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -114,7 +114,7 @@ export default function Reports() {
           )) : (
             <article className="panel">
               <p className="section-label">Reports ready</p>
-              <p>Deploy the backend or run the attack simulation to generate live incident reports.</p>
+              <p>Open an incident from Intake to generate an executive-ready report.</p>
             </article>
           )}
         </div>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, Crosshair, X } from 'lucide-react';
 import AppShell from '../components/AppShell';
-import { fetchIncidents, type Incident } from '../lib/api';
+import { fetchIncident, fetchIncidents, type Incident } from '../lib/api';
 
 const severityColor: Record<string, string> = {
   CRITICAL: '#ef4444',
@@ -27,13 +27,17 @@ export default function Investigate() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchIncidents()
-      .then((incidents) => {
-        const active = incidents[0] ?? null;
+    const incidentId = new URLSearchParams(window.location.search).get('incident');
+    const loadIncident = incidentId
+      ? fetchIncident(incidentId).catch(() => fetchIncidents().then((incidents) => incidents[0] ?? null))
+      : fetchIncidents().then((incidents) => incidents[0] ?? null);
+
+    loadIncident
+      .then((active) => {
         setIncident(active);
         setSelectedNode(null);
       })
-      .catch(() => setError('Portfolio preview is ready. Live incident data will appear after the backend is deployed.'));
+      .catch(() => setError('Open an incident from Intake to start an investigation.'));
   }, []);
 
   const nodes = useMemo<PositionedNode[]>(() => {
@@ -71,7 +75,7 @@ export default function Investigate() {
       {!incident ? (
         <article className="panel">
           <p className="section-label">Investigation ready</p>
-          <h2>Deploy the backend or run the simulation to populate the live attack graph.</h2>
+          <h2>Open an incident from Intake to populate the attack graph.</h2>
         </article>
       ) : (
         <section className="investigation-layout">

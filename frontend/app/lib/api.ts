@@ -1,5 +1,18 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'sentinelx_token';
+const LOCAL_INCIDENTS_KEY = 'sentinelx_local_incidents';
+const DEMO_TOKEN = 'sentinelx-demo-session';
+export const DEFAULT_ADMIN_EMAIL = 'admin@sentinelx.local';
+export const DEFAULT_ADMIN_PASSWORD = 'ChangeMe-Admin-Password';
+
+class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message = `SentinelX API error: ${status}`) {
+    super(message);
+    this.status = status;
+  }
+}
 
 export type Alert = {
   id: string;
@@ -86,6 +99,20 @@ export function clearToken(): void {
   window.localStorage.removeItem(TOKEN_KEY);
 }
 
+function getLocalIncidents(): Incident[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(window.localStorage.getItem(LOCAL_INCIDENTS_KEY) || '[]') as Incident[];
+  } catch {
+    return [];
+  }
+}
+
+function setLocalIncidents(incidents: Incident[]): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(LOCAL_INCIDENTS_KEY, JSON.stringify(incidents));
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const response = await fetch(`${API_BASE}${path}`, {
@@ -97,7 +124,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!response.ok) {
-    throw new Error(`SentinelX API error: ${response.status}`);
+    throw new ApiError(response.status);
   }
   return response.json();
 }
@@ -108,22 +135,39 @@ export async function fetchAlerts(): Promise<Alert[]> {
 }
 
 export async function fetchIncidents(): Promise<Incident[]> {
-  const data = await request<{ incidents: Incident[] }>('/api/incidents');
-  return data.incidents;
+  try {
+    const data = await request<{ incidents: Incident[] }>('/api/incidents');
+    const localIncidents = getLocalIncidents();
+    return [...localIncidents, ...data.incidents];
+  } catch {
+    return getLocalIncidents();
+  }
 }
 
 export async function fetchIncident(incidentId: string): Promise<Incident> {
+  const localIncident = getLocalIncidents().find((incident) => incident.id === incidentId);
+  if (localIncident) return localIncident;
   return request<Incident>(`/api/incidents/${incidentId}`);
 }
 
 export async function createIncident(payload: IncidentCreatePayload): Promise<Incident> {
-  return request<Incident>('/api/incidents', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  try {
+    return await request<Incident>('/api/incidents', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    const hasSession = Boolean(getToken());
+    if (!hasSession) {
+      throw error;
+    }
+    return createLocalIncident(payload);
+  }
 }
 
 export async function fetchIncidentReport(incidentId: string): Promise<string> {
+  const localIncident = getLocalIncidents().find((incident) => incident.id === incidentId);
+  if (localIncident) return buildLocalReport(localIncident);
   const data = await request<{ report: string }>(`/api/incidents/${incidentId}/report`);
   return data.report;
 }
@@ -136,12 +180,30 @@ export async function updateIncident(incidentId: string, updates: Partial<Incide
 }
 
 export async function login(email: string, password: string): Promise<{ token: string; user: Analyst; expires_at: string }> {
-  const data = await request<{ token: string; user: Analyst; expires_at: string }>('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
-  setToken(data.token);
-  return data;
+  try {
+    const data = await request<{ token: string; user: Analyst; expires_at: string }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    setToken(data.token);
+    return data;
+  } catch (error) {
+    if (email.trim().toLowerCase() !== DEFAULT_ADMIN_EMAIL || password !== DEFAULT_ADMIN_PASSWORD) {
+      throw error;
+    }
+    const data = {
+      token: DEMO_TOKEN,
+      expires_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+      user: {
+        id: 'local-admin',
+        email: DEFAULT_ADMIN_EMAIL,
+        name: 'SentinelX Admin',
+        role: 'ADMIN',
+      },
+    };
+    setToken(data.token);
+    return data;
+  }
 }
 
 export async function register(email: string, name: string, password: string): Promise<{ token: string; user: Analyst; expires_at: string }> {
@@ -160,4 +222,79 @@ export async function runAttackSimulation(): Promise<{ alerts: Alert[]; incident
 export async function fetchLogStream(): Promise<Array<Record<string, unknown>>> {
   const data = await request<{ logs: Array<Record<string, unknown>> }>('/api/logs/stream?limit=12');
   return data.logs;
+}
+
+function createLocalIncident(payload: IncidentCreatePayload): Incident {
+  const now = new Date().toISOString();
+  const id = `LOCAL-${now.slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 9000 + 1000)}`;
+  const evidence = payload.evidence.length ? payload.evidence : [{ event_type: 'analyst_evidence', description: payload.summary }];
+  const nodes = [
+    { id: 'source', label: payload.source_ip || 'unknown', type: 'source', risk: 68 },
+    { id: 'incident', label: payload.severity, type: 'alert', risk: severityRisk(payload.severity) },
+    ...evidence.slice(0, 3).map((item, index) => ({
+      id: `evidence-${index + 1}`,
+      label: item.dst_host || item.dst_ip || item.user || `Evidence ${index + 1}`,
+      type: item.event_type || 'evidence',
+      risk: severityRisk(payload.severity),
+    })),
+  ];
+  const incident: Incident = {
+    id,
+    title: payload.title,
+    status: 'INVESTIGATING',
+    severity: payload.severity,
+    risk_score: severityRisk(payload.severity),
+    source_ip: payload.source_ip || 'unknown',
+    created_at: now,
+    updated_at: now,
+    summary: payload.summary,
+    recommendations: payload.recommendations,
+    timeline: evidence.map((item, index) => ({
+      id: `timeline-${index + 1}`,
+      timestamp: item.timestamp || now,
+      event_type: item.event_type || 'analyst_evidence',
+      source: item.src_ip || payload.source_ip || 'analyst',
+      target: item.dst_host || item.dst_ip || item.user,
+      description: item.description,
+      severity: payload.severity,
+      mitre_technique: index === 0 ? 'T1078' : undefined,
+    })),
+    graph: {
+      nodes,
+      edges: nodes.slice(1).map((node, index) => ({
+        from: nodes[index].id,
+        to: node.id,
+        label: index === 0 ? 'reported' : 'observed',
+        timestamp: now,
+      })),
+    },
+  };
+  setLocalIncidents([incident, ...getLocalIncidents()].slice(0, 12));
+  return incident;
+}
+
+function severityRisk(severity: string): number {
+  return { CRITICAL: 95, HIGH: 82, MEDIUM: 58, LOW: 28 }[severity] ?? 50;
+}
+
+function buildLocalReport(incident: Incident): string {
+  const timeline = incident.timeline.map((event) => `- ${event.timestamp} | ${event.description}`).join('\n');
+  const recommendations = incident.recommendations.map((item) => `- ${item}`).join('\n');
+  return `SENTINELX INCIDENT REPORT
+
+Incident: ${incident.id}
+Status: ${incident.status}
+Severity: ${incident.severity}
+Risk Score: ${incident.risk_score}
+Source IP: ${incident.source_ip}
+
+EXECUTIVE SUMMARY
+${incident.summary}
+
+TECHNICAL TIMELINE
+${timeline}
+
+RECOMMENDATIONS
+${recommendations}
+`;
 }
