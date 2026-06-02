@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sentinelx
+  namespace: sentinelx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - replace-with-frontend-domain
+        - replace-with-backend-domain
+      secretName: sentinelx-tls
+  rules:
+    - host: replace-with-frontend-domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sentinelx-frontend
+                port:
+                  number: 3000
+    - host: replace-with-backend-domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sentinelx-backend
+                port:
+                  number: 8000

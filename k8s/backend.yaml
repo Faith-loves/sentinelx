@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinelx-backend
+  namespace: sentinelx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentinelx-backend
+  template:
+    metadata:
+      labels:
+        app: sentinelx-backend
+    spec:
+      containers:
+        - name: backend
+          image: sentinelx-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SENTINELX_ENV
+              value: production
+            - name: SENTINELX_DEMO_MODE
+              value: "false"
+            - name: SENTINELX_CORS_ORIGINS
+              value: https://replace-with-frontend-domain
+            - name: SENTINELX_ELASTICSEARCH_ENABLED
+              value: "true"
+            - name: ELASTICSEARCH_URL
+              value: http://elasticsearch:9200
+          envFrom:
+            - secretRef:
+                name: sentinelx-secrets
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinelx-backend
+  namespace: sentinelx
+spec:
+  selector:
+    app: sentinelx-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

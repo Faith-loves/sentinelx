@@ -1,0 +1,6 @@
+backend/data/*.db
+backend/app/**/__pycache__/
+frontend/.next/
+frontend/.next-build/
+frontend/node_modules/
+.env

@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinelx-frontend
+  namespace: sentinelx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentinelx-frontend
+  template:
+    metadata:
+      labels:
+        app: sentinelx-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: sentinelx-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: https://replace-with-backend-domain
+          envFrom:
+            - secretRef:
+                name: sentinelx-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinelx-frontend
+  namespace: sentinelx
+spec:
+  selector:
+    app: sentinelx-frontend
+  ports:
+    - port: 3000
+      targetPort: 3000
