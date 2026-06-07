@@ -1,0 +1,31 @@
+databases:
+  - name: sentinelx-postgres
+    plan: free
+    databaseName: sentinelx
+    user: sentinelx
+
+services:
+  - type: web
+    name: sentinelx-backend
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: SENTINELX_ENV
+        value: production
+      - key: SENTINELX_DEMO_MODE
+        value: "true"
+      - key: SENTINELX_ELASTICSEARCH_ENABLED
+        value: "false"
+      - key: SENTINELX_ADMIN_EMAIL
+        sync: false
+      - key: SENTINELX_ADMIN_PASSWORD
+        sync: false
+      - key: SENTINELX_CORS_ORIGINS
+        sync: false
+      - key: SENTINELX_DATABASE_URL
+        fromDatabase:
+          name: sentinelx-postgres
+          property: connectionString
